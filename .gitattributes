@@ -1,5 +1,6 @@
 * text=auto
 
+## MATLAB binary file types
 *.fig binary
 *.mat binary
 *.mdl binary diff merge=mlAutoMerge
@@ -23,6 +24,8 @@
 *.docx binary
 *.exe binary
 *.jpg binary
+*.tif binary
 *.pdf binary
 *.png binary
 *.xlsx binary
+*.zip binary
