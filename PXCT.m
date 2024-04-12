@@ -57,7 +57,8 @@ metadata.dose = metadata.mu*metadata.projections*metadata.N0*metadata.photon_ene
         % 
         % asize = 350, pixel size = 39.7073 nm
 
-densityImg = (firstTiffImg.*(metadata.high_cutoff - metadata.low_cutoff)/(2^16-1) + metadata.low_cutoff).*metadata.factor_edensity.*3.08;
+edensityImg = edensity(firstTiffImg,metadata);
+densityImg = density(edensityImg, 60.08, 30); % calculate material density assuming quartz
 
 % s8_2 but not great crop...
 % xc = 1060;
@@ -200,6 +201,10 @@ subplot(2,1,2)
 % use DataReadFinished event to record a video...
 
 %% functions
+
+edensity(22100,metadata)
+density(edensity(22100,metadata), 60.08, 30)
+
 function metadataStruct = readMetadata(filename)
     opts = delimitedTextImportOptions("NumVariables", 3);
     opts.DataLines = [1, 5];
@@ -220,4 +225,29 @@ function metadataStruct = readMetadata(filename)
     metadataStruct.factor = raw_metadata.value("factor");
     metadataStruct.pixel_size = raw_metadata.value("pixel size");
     metadataStruct.factor_edensity = raw_metadata.value("factor_edensity");
+end
+
+function Nr = edensity(counts, varargin)
+    switch length(varargin)
+        case 3
+            high_cutoff = varargin{1};
+            low_cutoff = varargin{2};
+            factor_edensity = varargin{3};
+        case 1
+            metadataStruct = varargin{1};
+            high_cutoff = metadataStruct.high_cutoff;
+            low_cutoff = metadataStruct.low_cutoff;
+            factor_edensity = metadataStruct.factor_edensity
+    end
+
+    Nr = (counts.*(high_cutoff - low_cutoff)/(2^16-1) + low_cutoff).*factor_edensity;
+end
+
+function rho = density(edensity, M, Z)
+    % calculates material density from electron density (e- per Angstrom^3),
+    % molar mass (g/mol), and electrons per mole
+
+    N_A = 6.0221367e23; % mol^-1, Avogadro constant
+
+    rho = (edensity .* M) ./ (N_A .* Z) .* 1e24; % g/cm^3
 end
