@@ -5,22 +5,8 @@ data_folder = "E:\PXCT\PXCT_data\test" ;
 tif_file_slice_list = dir(fullfile(data_folder,"*.tif"));
 firstTiff = Tiff(fullfile(data_folder,tif_file_slice_list(1).name));
 
-% convert tif slices to multipage tif volume
-tag_struct.ImageLength = firstTiff.getTag("ImageLength"); %todo: loop through Tiff.getTagNames
-tag_struct.ImageWidth = firstTiff.getTag("ImageWidth");
-tag_struct.SampleFormat = Tiff.SampleFormat.IEEEFP; %firstTiff.getTag("SampleFormat");
-tag_struct.Photometric = firstTiff.getTag("Photometric");
-tag_struct.BitsPerSample = 32; %firstTiff.getTag("BitsPerSample");
-tag_struct.SamplesPerPixel = 1; % firstTiff.getTag("SamplesPerPixel");
-tag_struct.Compression = Tiff.Compression.None; % firstTiff.getTag("Compression");
-tag_struct.PlanarConfiguration = firstTiff.getTag("PlanarConfiguration");
-tag_struct.ResolutionUnit = firstTiff.getTag("ResolutionUnit");
-tag_struct.XResolution = firstTiff.getTag("XResolution");
-tag_struct.YResolution = firstTiff.getTag("YResolution");
-tag_struct.Orientation = firstTiff.getTag("Orientation");
-
 %%
-firstTiffImg = single(read(firstTiff));
+firstTiffImg = read(firstTiff);
 
 %%
 metadata = readMetadata("E:\PXCT\PXCT_data\metadata\S4_2\TIFF_delta_FBP_ram-lak_freqscl_1.00_cutoffs.txt");
@@ -57,6 +43,8 @@ metadata.dose = metadata.mu*metadata.projections*metadata.N0*metadata.photon_ene
         % 
         % asize = 350, pixel size = 39.7073 nm
 
+%%
+
 edensityImg = edensity(firstTiffImg,metadata);
 densityImg = density(edensityImg, 60.08, 30); % calculate material density assuming quartz
 
@@ -66,73 +54,105 @@ densityImg = density(edensityImg, 60.08, 30); % calculate material density assum
 % r = 850;
 
 xc = 1025;
-yc = 950;
-r = 875;
+yc = 1000;
+r = 925;
 
 figure;
     subplot(1,2,1)
-        histogram(densityImg)
+        histogram(edensityImg)
     subplot(1,2,2)
-        imshow(densityImg)
+        imshow(edensityImg)
         viscircles([xc yc],r,'EdgeColor','r', 'LineWidth', 1);
 
 %%
-[xDim,yDim] = size(densityImg);
-[xx,yy] = meshgrid(1:yDim,1:xDim);
+[xDim,yDim] = size(edensityImg);
+[xx,yy] = meshgrid(1:yDim,1:xDim); % convert to single?
 mask = false(xDim,yDim);
 mask = mask | hypot(xx - xc, yy - yc) < r;
+clear xx yy
 
-croppedImg = densityImg.*mask;
+croppedImg = edensityImg; %.*mask;
 croppedImg = imcrop(croppedImg,[xc-r yc-r 2.*r 2.*r]);
 
 figure;
-    imshow(croppedImg)
+    subplot(1,2,1)
+        histogram(croppedImg)
+    subplot(1,2,2)
+        imshow(croppedImg)
 
 %%
+  
+% guess.mu = [0; 0; 1.2; 1.5; 1.7; 2.3; 4];
+% guess.Sigma(1,1,1) = 1e-4;
+% guess.Sigma(1,1,2) = 0.5;
+% guess.Sigma(1,1,3) = 0.5;
+% guess.Sigma(1,1,4) = 0.5;
+% guess.Sigma(1,1,5) = 0.5;
+% guess.Sigma(1,1,6) = 0.5;
+% guess.Sigma(1,1,7) = 0.5;
+% guess.ComponentProportion = [0.05 0.04 0.3 0.1 0.1 0.4 0.01];
+guess.mu = [0; 0; 0.4e4; 0.6e4; 0.75e4];
+guess.Sigma(1,1,1) = 1e-4;
+guess.Sigma(1,1,2) = 0.5;
+guess.Sigma(1,1,3) = 0.5;
+guess.Sigma(1,1,4) = 0.5;
+guess.Sigma(1,1,5) = 0.5;
+guess.ComponentProportion = [0.05 0.04 0.3 0.1 0.4];
+
+endmembers = length(guess.mu);
+fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-6);
+GMModel = fitgmdist(single(reshape(croppedImg,[],1)),...
+    endmembers,'RegularizationValue',0.00001, ...
+    'Start',guess, 'Options',fitopts);
+disp(GMModel.mu);
+gmPDF = @(x) arrayfun(@(x0) pdf(GMModel,x0),x);
+
 figure;
     h = histogram(croppedImg);
     h.Normalization = "pdf";
     hold on;
-    
-    guess.mu = [0; 0; 1.2; 1.5; 1.7; 2.3; 4];
-    guess.Sigma(1,1,1) = 1e-4;
-    guess.Sigma(1,1,2) = 0.5;
-    guess.Sigma(1,1,3) = 0.5;
-    guess.Sigma(1,1,4) = 0.5;
-    guess.Sigma(1,1,5) = 0.5;
-    guess.Sigma(1,1,6) = 0.5;
-    guess.Sigma(1,1,7) = 0.5;
-    guess.ComponentProportion = [0.05 0.04 0.3 0.1 0.1 0.4 0.01];
-    endmembers = length(guess.mu);
-    fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-6);
-
-    GMModel = fitgmdist(reshape(croppedImg,[],1),...
-        endmembers,'RegularizationValue',0.00001, ...
-        'Start',guess, 'Options',fitopts);
-    disp(GMModel.mu);
-    gmPDF = @(x) arrayfun(@(x0) pdf(GMModel,x0),x);
     plot(h.BinEdges,gmPDF(h.BinEdges),'LineWidth',3);
     for p = 1:endmembers
         plot(h.BinEdges,...
             normpdf(h.BinEdges,GMModel.mu(p),sqrt(GMModel.Sigma(:,:,p))).*GMModel.ComponentProportion(p),...
             'LineWidth',1);
     end
+    xlim([200 gca().XLim(2)])
     hold off;
 
 %%
+tag_struct.ImageLength = firstTiff.getTag("ImageLength"); %todo: loop through Tiff.getTagNames
+tag_struct.ImageWidth = firstTiff.getTag("ImageWidth");
+tag_struct.SampleFormat = firstTiff.getTag("SampleFormat");
+tag_struct.Photometric = firstTiff.getTag("Photometric");
+tag_struct.BitsPerSample = firstTiff.getTag("BitsPerSample");
+tag_struct.SamplesPerPixel = firstTiff.getTag("SamplesPerPixel");
+tag_struct.Compression = firstTiff.getTag("Compression");
+tag_struct.PlanarConfiguration = firstTiff.getTag("PlanarConfiguration");
+tag_struct.ResolutionUnit = firstTiff.getTag("ResolutionUnit");
+tag_struct.XResolution = firstTiff.getTag("XResolution");
+tag_struct.YResolution = firstTiff.getTag("YResolution");
+tag_struct.Orientation = firstTiff.getTag("Orientation");
+
 % overwrite tag_struct with file-specific metadata
+% tag_struct.SampleFormat = Tiff.SampleFormat.IEEEFP; tag_struct.BitsPerSample = 32;
+tag_struct.SampleFormat = Tiff.SampleFormat.UInt; tag_struct.BitsPerSample = 16;
+tag_struct.SamplesPerPixel = 1; 
+tag_struct.Compression = Tiff.Compression.None;
+
 tag_struct.ImageLength = size(croppedImg,1);
 tag_struct.ImageWidth = size(croppedImg,2);
 tag_struct.ResolutionUnit = 3; % cm
 tag_struct.XResolution = metadata.pixel_size;
 tag_struct.YResolution = metadata.pixel_size;
 
-tiff_vol = Tiff('S4_2_density.tif', 'w8'); % prepare a BigTIFF for writing
+tiff_vol = Tiff('test_edensity_vol_16.tif', 'w8'); % prepare a BigTIFF for writing
 for i = 1:length(tif_file_slice_list)
     ith_tiff = Tiff(fullfile(data_folder,tif_file_slice_list(i).name));
     ith_tiffImg = single(read(ith_tiff));
-    ith_tiffImg = (ith_tiffImg.*(metadata.high_cutoff - metadata.low_cutoff)/(2^16-1) + metadata.low_cutoff).*metadata.factor_edensity.*3.08;
-    ith_tiffImg = ith_tiffImg.*mask;
+    ith_tiffImg = edensity(ith_tiffImg,metadata);
+    % ith_tiffImg = density(ith_tiffImg, 60.08, 30); % assuming quartz
+    %ith_tiffImg = ith_tiffImg.*mask;
     ith_tiffImg = imcrop(ith_tiffImg,[xc-r yc-r 2.*r 2.*r]);
     setTag(tiff_vol,tag_struct);
     write(tiff_vol,ith_tiffImg);
@@ -145,12 +165,12 @@ clear tiff_vol;
 %reducedImg = imresize3(tiffreadVolume('S4_2_cropped.tif'), 0.25);
 %%
 
-bim = blockedImage(tiffreadVolume('testDensityVol.tif'), BlockSize=[300 300 300]);
+bim = blockedImage(tiffreadVolume('test_edensity_vol_16.tif'), BlockSize=[300 300 300]);
 
 %%
 figure;
 subplot(2,1,1)
-    h = histogram(tiffreadVolume('testDensityVol.tif'));
+    h = histogram(tiffreadVolume('test_edensity_vol_16.tif'));
     h.Normalization = "probability";
     range = [h.BinEdges(1) h.BinEdges(end)];
     xlim(range)
@@ -159,7 +179,7 @@ subplot(2,1,1)
 voldisp = volshow(bim);
 
 %%
-alpha = [0 0 0 .02 .8 1 .8 0.02 .005 .005];
+alpha = [0 0 .02 .8 1 .8 0.02 .005 .005];
 % color = [0 0 0;
 %         200 140 75;
 %         231 208 141;
@@ -167,7 +187,6 @@ alpha = [0 0 0 .02 .8 1 .8 0.02 .005 .005];
 %         255 255 255;
 %         255 255 255] ./ 255;
 color = [255 255 255;
-        255 255 255;
         255 255 255;
         200 140 75;
         200 140 75;
@@ -180,8 +199,8 @@ color = [255 255 255;
 % intensity = [0 13500 13500.1 18000 18001 40000]; % S8_1
 % intensity = [0 15500 15500.1 21500 21501 40000]; % S8_2
 % intensity = [0 14000 14000.1 19000 19000.1 25000]; % test cropped
-p = 5; % component to render
-intensity = [range(1) 0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) range(end)]; % test density
+p = 3; % component to render
+intensity = [range(1) GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) range(end)]; % test density
 %intensity = [0 1.1 1.11 1.9 1.91 h.BinEdges(end)]; % test cropped
 queryPoints = linspace(min(intensity),max(intensity),256);
 alphamap = interp1(intensity,alpha,queryPoints)';
@@ -201,9 +220,9 @@ subplot(2,1,2)
 % use DataReadFinished event to record a video...
 
 %% functions
-
-edensity(22100,metadata)
-density(edensity(22100,metadata), 60.08, 30)
+firstTiffImg(1000,1000)
+edensity(double(firstTiffImg(1000,1000)),metadata)
+edensity(firstTiffImg(1000,1000),metadata)
 
 function metadataStruct = readMetadata(filename)
     opts = delimitedTextImportOptions("NumVariables", 3);
@@ -227,7 +246,12 @@ function metadataStruct = readMetadata(filename)
     metadataStruct.factor_edensity = raw_metadata.value("factor_edensity");
 end
 
-function Nr = edensity(counts, varargin)
+function Nr = edensity(int16data, varargin)
+    % calculate electron density (electrons/cubic angstrom) 
+    % from integer data and metadata structure or scaling factors
+
+    floatingdata = single(int16data);
+
     switch length(varargin)
         case 3
             high_cutoff = varargin{1};
@@ -237,17 +261,21 @@ function Nr = edensity(counts, varargin)
             metadataStruct = varargin{1};
             high_cutoff = metadataStruct.high_cutoff;
             low_cutoff = metadataStruct.low_cutoff;
-            factor_edensity = metadataStruct.factor_edensity
+            factor_edensity = metadataStruct.factor_edensity;
     end
 
-    Nr = (counts.*(high_cutoff - low_cutoff)/(2^16-1) + low_cutoff).*factor_edensity;
+    Nr = (floatingdata.*(high_cutoff - low_cutoff)/(2^16-1) + low_cutoff).*factor_edensity;
+
+    Nr = uint16(round(Nr.*1e4)); % to make integers meaningful?
+    % WARNING: cannot handle electron densities higher than 6.5535
+    % electrons/cubic angstrom (typically nonphysical)
 end
 
-function rho = density(edensity, M, Z)
-    % calculates material density from electron density (e- per Angstrom^3),
+function rho = density(n_e, A, Z)
+    % calculates mass density from electron density (e- per Angstrom^3),
     % molar mass (g/mol), and electrons per mole
 
     N_A = 6.0221367e23; % mol^-1, Avogadro constant
 
-    rho = (edensity .* M) ./ (N_A .* Z) .* 1e24; % g/cm^3
+    rho = (n_e .* A) ./ (N_A .* Z) .* 1e24; % g/cm^3
 end
