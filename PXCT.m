@@ -164,8 +164,9 @@ clear tiff_vol;
 %%
 %reducedImg = imresize3(tiffreadVolume('S4_2_cropped.tif'), 0.25);
 %%
-
 bim = blockedImage(tiffreadVolume('test_edensity_vol_16.tif'), BlockSize=[300 300 300]);
+mbim = makeMultiLevel3D(bim);
+clear bim;
 
 %%
 figure;
@@ -176,7 +177,7 @@ subplot(2,1,1)
     xlim(range)
 
 %%
-voldisp = volshow(bim);
+voldisp = volshow(mbim);
 
 %%
 alpha = [0 0 .02 .8 1 .8 0.02 .005 .005];
@@ -200,8 +201,7 @@ color = [255 255 255;
 % intensity = [0 15500 15500.1 21500 21501 40000]; % S8_2
 % intensity = [0 14000 14000.1 19000 19000.1 25000]; % test cropped
 p = 3; % component to render
-intensity = [range(1) GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) range(end)]; % test density
-%intensity = [0 1.1 1.11 1.9 1.91 h.BinEdges(end)]; % test cropped
+intensity = [range(1) GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) range(end)];
 queryPoints = linspace(min(intensity),max(intensity),256);
 alphamap = interp1(intensity,alpha,queryPoints)';
 colormap = interp1(intensity,color,queryPoints);
@@ -220,9 +220,6 @@ subplot(2,1,2)
 % use DataReadFinished event to record a video...
 
 %% functions
-firstTiffImg(1000,1000)
-edensity(double(firstTiffImg(1000,1000)),metadata)
-edensity(firstTiffImg(1000,1000),metadata)
 
 function metadataStruct = readMetadata(filename)
     opts = delimitedTextImportOptions("NumVariables", 3);
