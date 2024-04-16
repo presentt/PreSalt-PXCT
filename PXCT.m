@@ -81,46 +81,6 @@ figure;
         imshow(croppedImg)
 
 %%
-  
-% guess.mu = [0; 0; 1.2; 1.5; 1.7; 2.3; 4];
-% guess.Sigma(1,1,1) = 1e-4;
-% guess.Sigma(1,1,2) = 0.5;
-% guess.Sigma(1,1,3) = 0.5;
-% guess.Sigma(1,1,4) = 0.5;
-% guess.Sigma(1,1,5) = 0.5;
-% guess.Sigma(1,1,6) = 0.5;
-% guess.Sigma(1,1,7) = 0.5;
-% guess.ComponentProportion = [0.05 0.04 0.3 0.1 0.1 0.4 0.01];
-guess.mu = [0; 0; 0.4e4; 0.6e4; 0.75e4];
-guess.Sigma(1,1,1) = 1e-4;
-guess.Sigma(1,1,2) = 0.5;
-guess.Sigma(1,1,3) = 0.5;
-guess.Sigma(1,1,4) = 0.5;
-guess.Sigma(1,1,5) = 0.5;
-guess.ComponentProportion = [0.05 0.04 0.3 0.1 0.4];
-
-endmembers = length(guess.mu);
-fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-6);
-GMModel = fitgmdist(single(reshape(croppedImg,[],1)),...
-    endmembers,'RegularizationValue',0.00001, ...
-    'Start',guess, 'Options',fitopts);
-disp(GMModel.mu);
-gmPDF = @(x) arrayfun(@(x0) pdf(GMModel,x0),x);
-
-figure;
-    h = histogram(croppedImg);
-    h.Normalization = "pdf";
-    hold on;
-    plot(h.BinEdges,gmPDF(h.BinEdges),'LineWidth',3);
-    for p = 1:endmembers
-        plot(h.BinEdges,...
-            normpdf(h.BinEdges,GMModel.mu(p),sqrt(GMModel.Sigma(:,:,p))).*GMModel.ComponentProportion(p),...
-            'LineWidth',1);
-    end
-    xlim([200 gca().XLim(2)])
-    hold off;
-
-%%
 tag_struct.ImageLength = firstTiff.getTag("ImageLength"); %todo: loop through Tiff.getTagNames
 tag_struct.ImageWidth = firstTiff.getTag("ImageWidth");
 tag_struct.SampleFormat = firstTiff.getTag("SampleFormat");
@@ -162,11 +122,108 @@ close(tiff_vol)
 clear tiff_vol;
 
 %%
-%reducedImg = imresize3(tiffreadVolume('S4_2_cropped.tif'), 0.25);
-%%
-bim = blockedImage(tiffreadVolume('test_edensity_vol_16.tif'), BlockSize=[300 300 300]);
+bim = blockedImage(tiffreadVolume('test_edensity_vol_16.tif'), BlockSize=[100 100 100]);
 mbim = makeMultiLevel3D(bim);
 clear bim;
+
+%%
+edges = 0:1e4;
+
+% [n, ~] = histcounts(tiffreadVolume('test_edensity_vol_16.tif'), edges);
+% bar(edges(1:end-1),n);
+
+[hbim, ~] = apply(mbim, ...
+             @(bs)histcounts(bs.Data,edges));
+hdata = gather(hbim);
+hdata = sum(hdata,3);
+hdata = sum(hdata,1);
+hdata = reshape(hdata,length(edges)-1,[]);
+hdata = sum(hdata,2)';
+
+%%
+% fit phases as gaussians, modified from
+% https://www.mathworks.com/matlabcentral/answers/720430-how-do-i-use-fitgmdist-with-a-set-of-data-that-is-not-in-a-histogram-format
+X = hdata(2:end)./sum(hdata(2:end));
+xvals = edges(2:end-1)';
+
+% fit a half-gaussian for the pore space, and then several gaussians
+mixGausMdl = @(b,x) b(1) .* exp(-(x(:, 1)).^2 /(2*b(2)^2)) + ...
+                    b(3) .* exp(-(x(:, 1) - b(4)).^2 /(2*b(5)^2)) + ...
+                    b(6) .* exp(-(x(:, 1) - b(7)).^2 /(2*b(8)^2)) + ...
+                    b(9) .* exp(-(x(:, 1) -b(10)).^2/(2*b(11)^2)) + ...
+                    b(12) .*exp(-(x(:, 1) -b(13)).^2/(2*b(14)^2));
+%               amp,   mu,  sd 
+guess_params = [0.2,       200, ...
+                0.2,    1, 200, ...
+                0.2, 4000, 200, ...
+                0.2, 6000, 200, ...
+                0.2, 7500, 500];
+lower_bounds = zeros(size(guess_params));
+high_bounds = [];
+%test = mixGausMdl(guess_params, edges(1:end-1));
+
+% Poisson log-likelihood; fmincon finds the minimum of this function. Thus, 
+% will find the max of the poisson loglikelihood.
+poissonLogLikelihood = @(r,lambda) r(:)'*log(lambda(:)) - sum(lambda);
+% loss functions for fitting
+nllFcn = @(params) -poissonLogLikelihood(X, mixGausMdl(params, xvals(:)));
+%test2 = nllFcn(guess_params);
+
+opts = optimset('TolX', 1e-8, 'MaxIter', 1e4, 'MaxFunEvals', 1e4, 'Display', 'on');
+[paramEst, ~, exitFlag, outStruct] = fmincon(nllFcn, guess_params, [], [], [], [], lower_bounds, high_bounds, [],opts);
+
+
+histGMModel = gmdistribution(paramEst(4:3:end)', ...
+                            reshape(paramEst(5:3:end).^2, [1 1 4]), ...
+                            paramEst(3:3:end));
+gmPDF = @(x) arrayfun(@(x0) pdf(histGMModel,x0),x);
+
+figure;
+    h = histogram('BinEdges',edges,'BinCounts',hdata);
+    h.Normalization = "pdf";
+    hold on;
+    plot(h.BinEdges,gmPDF(h.BinEdges),'LineWidth',3);
+    for p = 1:histGMModel.NumComponents
+        plot(h.BinEdges,...
+            normpdf(h.BinEdges, histGMModel.mu(p), ...
+                sqrt(histGMModel.Sigma(:,:,p))).*histGMModel.ComponentProportion(p),...
+                'LineWidth',1);
+    end
+    plot(h.BinEdges, paramEst(1) .* exp(-(h.BinEdges).^2 /(2*paramEst(2)^2)))
+    xlim([2 1e4])
+    ylim([0 1e-3])
+    hold off;
+
+%%
+guess.mu = [0; 0; 4000; 6000; 7500];
+guess.Sigma(1,1,1) = 1;
+guess.Sigma(1,1,2) = 100;
+guess.Sigma(1,1,3) = 500;
+guess.Sigma(1,1,4) = 500;
+guess.Sigma(1,1,5) = 500;
+guess.ComponentProportion = [0.5 0.1 0.1 0.1 0.2];
+
+endmembers = length(guess.mu);
+fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-6);
+GMModel = fitgmdist(hdata,...
+    endmembers,'RegularizationValue',0.00001, ...
+    'Start',guess, 'Options',fitopts);
+disp(GMModel.mu);
+gmPDF = @(x) arrayfun(@(x0) pdf(GMModel,x0),x);
+
+figure;
+    h = histogram('BinEdges',edges,'BinCounts',hdata);
+    h.Normalization = "pdf";
+    hold on;
+    plot(h.BinEdges,gmPDF(h.BinEdges),'LineWidth',3);
+    for p = 1:endmembers
+        plot(h.BinEdges,...
+            normpdf(h.BinEdges,GMModel.mu(p),sqrt(GMModel.Sigma(:,:,p))).*GMModel.ComponentProportion(p),...
+            'LineWidth',1);
+    end
+    xlim([200 1e4])
+    ylim([0 1e-3])
+    hold off;
 
 %%
 figure;
