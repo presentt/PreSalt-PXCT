@@ -1,24 +1,24 @@
 % Visualize microfossil PXCT data
 % Ted Present, Feb 2024
 
-data_folder = "E:\PXCT\PXCT_data\test" ;
+data_folder = "E:\PXCT\PXCT_data\S8_1" ;
 tif_file_slice_list = dir(fullfile(data_folder,"*.tif"));
-firstTiff = Tiff(fullfile(data_folder,tif_file_slice_list(1).name));
 
 %%
+firstTiff = Tiff(fullfile(data_folder,tif_file_slice_list(1).name));
 firstTiffImg = read(firstTiff);
 
 %%
-metadata = readMetadata("E:\PXCT\PXCT_data\metadata\S4_2\TIFF_delta_FBP_ram-lak_freqscl_1.00_cutoffs.txt");
+metadata = readMetadata("E:\PXCT\PXCT_data\metadata\S8_1\TIFF_delta_FBP_ram-lak_freqscl_1.00_cutoffs.txt");
 metadata.photon_energy = 6.2; % keV       TODO: append these experimental info to the metadata structure
 metadata.photon_flux = 8e5; % photons/s, for 5.7mm working distance
 metadata.field_of_view = [80 83]; % um
 metadata.step_size = 2.5; % um
 metadata.exposure_time = 0.05; % s
-metadata.projections = 640;
+metadata.projections = 710; %TODO: pull from dose estimate file
 metadata.mu = NaN; % TODO: pull from Henke 1993 for quartz
 metadata.rho = 2.65; % g/cc, bulk density of specimen assuming quartz; quartz GLASS is 2.2g/cc, and this is what the rendering picked up, too; also what Diaz uses for their capillary
-metadata.N0 = 3.480e+06; % photons/um^2 % TODO: calculate from flux, FOV, step size, exposure time, projections
+metadata.N0 = 3.461e6; % photons/um^2 % TODO: calculate from flux, FOV, step size, exposure time, projections
 metadata.dose = metadata.mu*metadata.projections*metadata.N0*metadata.photon_energy/metadata.rho; % Gy, total dose imparted to specimen, Diaz et al., J. Struct. Bio., 2015
         % Scan = 
         % Measured photons per frame = 2.249e+07
@@ -53,9 +53,9 @@ densityImg = density(edensityImg, 60.08, 30); % calculate material density assum
 % yc = 1010;
 % r = 850;
 
-xc = 1025;
-yc = 1000;
-r = 925;
+xc = 1040;
+yc = 990;
+r = 825;
 
 figure;
     subplot(1,2,1)
@@ -106,7 +106,7 @@ tag_struct.ResolutionUnit = 3; % cm
 tag_struct.XResolution = metadata.pixel_size;
 tag_struct.YResolution = metadata.pixel_size;
 
-tiff_vol = Tiff('test_edensity_vol_16.tif', 'w8'); % prepare a BigTIFF for writing
+tiff_vol = Tiff('S8_1_edensity.tif', 'w8'); % prepare a BigTIFF for writing
 for i = 1:length(tif_file_slice_list)
     ith_tiff = Tiff(fullfile(data_folder,tif_file_slice_list(i).name));
     ith_tiffImg = single(read(ith_tiff));
@@ -122,15 +122,12 @@ close(tiff_vol)
 clear tiff_vol;
 
 %%
-bim = blockedImage(tiffreadVolume('test_edensity_vol_16.tif'), BlockSize=[100 100 100]);
+bim = blockedImage(tiffreadVolume('S8_1_edensity.tif'), BlockSize=[100 100 100]);
 mbim = makeMultiLevel3D(bim);
 clear bim;
 
 %%
 edges = 0:1e4;
-
-% [n, ~] = histcounts(tiffreadVolume('test_edensity_vol_16.tif'), edges);
-% bar(edges(1:end-1),n);
 
 [hbim, ~] = apply(mbim, ...
              @(bs)histcounts(bs.Data,edges));
@@ -195,70 +192,60 @@ figure;
     hold off;
 
 %%
-guess.mu = [0; 0; 4000; 6000; 7500];
-guess.Sigma(1,1,1) = 1;
-guess.Sigma(1,1,2) = 100;
-guess.Sigma(1,1,3) = 500;
-guess.Sigma(1,1,4) = 500;
-guess.Sigma(1,1,5) = 500;
-guess.ComponentProportion = [0.5 0.1 0.1 0.1 0.2];
-
-endmembers = length(guess.mu);
-fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-6);
-GMModel = fitgmdist(hdata,...
-    endmembers,'RegularizationValue',0.00001, ...
-    'Start',guess, 'Options',fitopts);
-disp(GMModel.mu);
-gmPDF = @(x) arrayfun(@(x0) pdf(GMModel,x0),x);
-
-figure;
-    h = histogram('BinEdges',edges,'BinCounts',hdata);
-    h.Normalization = "pdf";
-    hold on;
-    plot(h.BinEdges,gmPDF(h.BinEdges),'LineWidth',3);
-    for p = 1:endmembers
-        plot(h.BinEdges,...
-            normpdf(h.BinEdges,GMModel.mu(p),sqrt(GMModel.Sigma(:,:,p))).*GMModel.ComponentProportion(p),...
-            'LineWidth',1);
-    end
-    xlim([200 1e4])
-    ylim([0 1e-3])
-    hold off;
+% guess.mu = [0; 0; 4000; 6000; 7500];
+% guess.Sigma(1,1,1) = 1;
+% guess.Sigma(1,1,2) = 100;
+% guess.Sigma(1,1,3) = 500;
+% guess.Sigma(1,1,4) = 500;
+% guess.Sigma(1,1,5) = 500;
+% guess.ComponentProportion = [0.5 0.1 0.1 0.1 0.2];
+% 
+% endmembers = length(guess.mu);
+% fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-6);
+% GMModel = fitgmdist(hdata,...
+%     endmembers,'RegularizationValue',0.00001, ...
+%     'Start',guess, 'Options',fitopts);
+% disp(GMModel.mu);
+% gmPDF = @(x) arrayfun(@(x0) pdf(GMModel,x0),x);
+% 
+% figure;
+%     h = histogram('BinEdges',edges,'BinCounts',hdata);
+%     h.Normalization = "pdf";
+%     hold on;
+%     plot(h.BinEdges,gmPDF(h.BinEdges),'LineWidth',3);
+%     for p = 1:endmembers
+%         plot(h.BinEdges,...
+%             normpdf(h.BinEdges,GMModel.mu(p),sqrt(GMModel.Sigma(:,:,p))).*GMModel.ComponentProportion(p),...
+%             'LineWidth',1);
+%     end
+%     xlim([200 1e4])
+%     ylim([0 1e-3])
+%     hold off;
 
 %%
-figure;
-subplot(2,1,1)
-    h = histogram(tiffreadVolume('test_edensity_vol_16.tif'));
-    h.Normalization = "probability";
-    range = [h.BinEdges(1) h.BinEdges(end)];
-    xlim(range)
+% figure;
+% subplot(2,1,1)
+%     h = histogram(tiffreadVolume('S8_1_edensity.tif'));
+%     h.Normalization = "probability";
+%     range = [h.BinEdges(1) h.BinEdges(end)];
+%     xlim(range)
 
 %%
 voldisp = volshow(mbim);
 
 %%
+GMModel = histGMModel;
 alpha = [0 0 .02 .8 1 .8 0.02 .005 .005];
-% color = [0 0 0;
-%         200 140 75;
-%         231 208 141;
-%         231 208 141;
-%         255 255 255;
-%         255 255 255] ./ 255;
-color = [255 255 255;
-        255 255 255;
-        200 140 75;
-        200 140 75;
-        200 140 75;
-        200 140 75;
-        200 140 75;
-        255 255 255;
-        255 255 255] ./ 255;
-% intensity = [0 11300 11300.1 11800 11801 40000]; % S4_2
-% intensity = [0 13500 13500.1 18000 18001 40000]; % S8_1
-% intensity = [0 15500 15500.1 21500 21501 40000]; % S8_2
-% intensity = [0 14000 14000.1 19000 19000.1 25000]; % test cropped
-p = 3; % component to render
-intensity = [range(1) GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) range(end)];
+colors = [0 0 0;
+          200 140 75;
+          231 208 141;
+          255 255 255;
+          128 0 0] ./ 255;
+color = ones(9, 3);
+
+p = 2; % component to render
+color(3:7, :) = repmat(colors(p, :), 5, 1);
+intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) 1e4];
 queryPoints = linspace(min(intensity),max(intensity),256);
 alphamap = interp1(intensity,alpha,queryPoints)';
 colormap = interp1(intensity,color,queryPoints);
@@ -266,10 +253,29 @@ colormap = interp1(intensity,color,queryPoints);
 voldisp.Alphamap = alphamap;
 voldisp.Colormap = colormap;
 
+p = 3; % component to render
+color(3:7, :) = repmat(colors(p, :), 5, 1);
+intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) 1e4];
+queryPoints = linspace(min(intensity),max(intensity),256);
+alphamap = interp1(intensity,alpha,queryPoints)';
+colormap = interp1(intensity,color,queryPoints);
+
+voldisp.Alphamap = (voldisp.Alphamap + alphamap) ./ max(voldisp.Alphamap + alphamap);
+voldisp.Colormap = (voldisp.Colormap + colormap) ./ 2;
+
+subplot(2,1,1)
+    h = histogram('BinEdges',edges,'BinCounts',hdata);
+    hold on;
+    h.Normalization = "pdf";
+    plot(h.BinEdges,gmPDF(h.BinEdges),'LineWidth',3);
+    hold off;
+    xlim([2 1e4])
+    ylim([0 max(gmPDF(h.BinEdges))])
 subplot(2,1,2)
-    plot(intensity,alpha,'-o'); hold on;
-    plot(intensity,color(:,3),'-x'); hold off;
-    xlim(range)
+    plot(queryPoints,voldisp.Alphamap,'-o'); hold on;
+    plot(queryPoints,voldisp.Colormap,'-x'); hold off;
+    xlim([2 1e4])
+    xlabel('e^- density x 10^4');
 
 %voldisp.RenderingStyle ="GradientOpacity";
 
