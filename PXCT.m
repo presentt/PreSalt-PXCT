@@ -1,7 +1,7 @@
 % Visualize microfossil PXCT data
 % Ted Present, Feb 2024
 
-data_folder = "E:\PXCT\PXCT_data\S8_1" ;
+data_folder = "E:\PXCT\PXCT_data\S8_2" ;
 tif_file_slice_list = dir(fullfile(data_folder,"*.tif"));
 
 %%
@@ -9,7 +9,7 @@ firstTiff = Tiff(fullfile(data_folder,tif_file_slice_list(1).name));
 firstTiffImg = read(firstTiff);
 
 %%
-metadata = readMetadata("E:\PXCT\PXCT_data\metadata\S8_1\TIFF_delta_FBP_ram-lak_freqscl_1.00_cutoffs.txt");
+metadata = readMetadata("E:\PXCT\PXCT_data\metadata\S8_2\S8 TIFF_delta_FBP_ram-lak_freqscl_1.00_cutoffs.txt");
 metadata.photon_energy = 6.2; % keV       TODO: append these experimental info to the metadata structure
 metadata.photon_flux = 8e5; % photons/s, for 5.7mm working distance
 metadata.field_of_view = [80 83]; % um
@@ -48,14 +48,9 @@ metadata.dose = metadata.mu*metadata.projections*metadata.N0*metadata.photon_ene
 edensityImg = edensity(firstTiffImg,metadata);
 densityImg = density(edensityImg, 60.08, 30); % calculate material density assuming quartz
 
-% s8_2 but not great crop...
-% xc = 1060;
-% yc = 1010;
-% r = 850;
-
-xc = 1040;
-yc = 990;
-r = 825;
+xc = 1055;
+yc = 1010;
+r = 975;
 
 figure;
     subplot(1,2,1)
@@ -106,7 +101,7 @@ tag_struct.ResolutionUnit = 3; % cm
 tag_struct.XResolution = metadata.pixel_size;
 tag_struct.YResolution = metadata.pixel_size;
 
-tiff_vol = Tiff('S8_1_edensity.tif', 'w8'); % prepare a BigTIFF for writing
+tiff_vol = Tiff('S8_2_edensity.tif', 'w8'); % prepare a BigTIFF for writing
 for i = 1:length(tif_file_slice_list)
     ith_tiff = Tiff(fullfile(data_folder,tif_file_slice_list(i).name));
     ith_tiffImg = single(read(ith_tiff));
@@ -122,7 +117,7 @@ close(tiff_vol)
 clear tiff_vol;
 
 %%
-bim = blockedImage(tiffreadVolume('S8_1_edensity.tif'), BlockSize=[100 100 100]);
+bim = blockedImage(tiffreadVolume('S8_2_edensity.tif'), BlockSize=[100 100 100]);
 mbim = makeMultiLevel3D(bim);
 clear bim;
 
@@ -223,14 +218,6 @@ figure;
 %     hold off;
 
 %%
-% figure;
-% subplot(2,1,1)
-%     h = histogram(tiffreadVolume('S8_1_edensity.tif'));
-%     h.Normalization = "probability";
-%     range = [h.BinEdges(1) h.BinEdges(end)];
-%     xlim(range)
-
-%%
 voldisp = volshow(mbim);
 
 %%
@@ -252,16 +239,16 @@ colormap = interp1(intensity,color,queryPoints);
 
 voldisp.Alphamap = alphamap;
 voldisp.Colormap = colormap;
-
-p = 3; % component to render
-color(3:7, :) = repmat(colors(p, :), 5, 1);
-intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) 1e4];
-queryPoints = linspace(min(intensity),max(intensity),256);
-alphamap = interp1(intensity,alpha,queryPoints)';
-colormap = interp1(intensity,color,queryPoints);
-
-voldisp.Alphamap = (voldisp.Alphamap + alphamap) ./ max(voldisp.Alphamap + alphamap);
-voldisp.Colormap = (voldisp.Colormap + colormap) ./ 2;
+% 
+% p = 3; % component to render
+% color(3:7, :) = repmat(colors(p, :), 5, 1);
+% intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) 1e4];
+% queryPoints = linspace(min(intensity),max(intensity),256);
+% alphamap = interp1(intensity,alpha,queryPoints)';
+% colormap = interp1(intensity,color,queryPoints);
+% 
+% voldisp.Alphamap = (voldisp.Alphamap + alphamap) ./ max(voldisp.Alphamap + alphamap);
+% voldisp.Colormap = (voldisp.Colormap + colormap) ./ 2;
 
 subplot(2,1,1)
     h = histogram('BinEdges',edges,'BinCounts',hdata);
@@ -272,9 +259,11 @@ subplot(2,1,1)
     xlim([2 1e4])
     ylim([0 max(gmPDF(h.BinEdges))])
 subplot(2,1,2)
-    plot(queryPoints,voldisp.Alphamap,'-o'); hold on;
-    plot(queryPoints,voldisp.Colormap,'-x'); hold off;
+    plot(queryPoints,voldisp.Alphamap,'k-o'); hold on;
+    h = plot(queryPoints,voldisp.Colormap,'-x'); hold off;
+    h(1).Color = 'red'; h(2).Color = 'green'; h(3).Color = 'blue';
     xlim([2 1e4])
+    legend('alpha','red','green','blue');
     xlabel('e^- density x 10^4');
 
 %voldisp.RenderingStyle ="GradientOpacity";
