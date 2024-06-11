@@ -1,7 +1,7 @@
 % Visualize microfossil PXCT data
 % Ted Present, Feb 2024
 
-data_folder = "E:\PXCT\PXCT_data\S8_2" ;
+data_folder = "E:\PXCT\PXCT_data\S4_2" ;
 tif_file_slice_list = dir(fullfile(data_folder,"*.tif"));
 
 %%
@@ -9,7 +9,7 @@ firstTiff = Tiff(fullfile(data_folder,tif_file_slice_list(1).name));
 firstTiffImg = read(firstTiff);
 
 %%
-metadata = readMetadata("E:\PXCT\PXCT_data\metadata\S8_2\S8 TIFF_delta_FBP_ram-lak_freqscl_1.00_cutoffs.txt");
+metadata = readMetadata("E:\PXCT\PXCT_data\metadata\S4_2\TIFF_delta_FBP_ram-lak_freqscl_1.00_cutoffs.txt");
 metadata.photon_energy = 6.2; % keV       TODO: append these experimental info to the metadata structure
 metadata.photon_flux = 8e5; % photons/s, for 5.7mm working distance
 metadata.field_of_view = [80 83]; % um
@@ -48,9 +48,9 @@ metadata.dose = metadata.mu*metadata.projections*metadata.N0*metadata.photon_ene
 edensityImg = edensity(firstTiffImg,metadata);
 densityImg = density(edensityImg, 60.08, 30); % calculate material density assuming quartz
 
-xc = 1055;
-yc = 1010;
-r = 975;
+xc = 1025;
+yc = 975;
+r = 950;
 
 figure;
     subplot(1,2,1)
@@ -101,7 +101,7 @@ tag_struct.ResolutionUnit = 3; % cm
 tag_struct.XResolution = metadata.pixel_size;
 tag_struct.YResolution = metadata.pixel_size;
 
-tiff_vol = Tiff('S8_2_edensity.tif', 'w8'); % prepare a BigTIFF for writing
+tiff_vol = Tiff('S4_2_edensity.tif', 'w8'); % prepare a BigTIFF for writing
 for i = 1:length(tif_file_slice_list)
     ith_tiff = Tiff(fullfile(data_folder,tif_file_slice_list(i).name));
     ith_tiffImg = single(read(ith_tiff));
@@ -117,7 +117,8 @@ close(tiff_vol)
 clear tiff_vol;
 
 %%
-bim = blockedImage(tiffreadVolume('S8_2_edensity.tif'), BlockSize=[100 100 100]);
+tif_vol_file = 'S4_2_edensity.tif' ;
+bim = blockedImage(tiffreadVolume(tif_vol_file), BlockSize=[100 100 100]);
 mbim = makeMultiLevel3D(bim);
 clear bim;
 
@@ -131,6 +132,8 @@ hdata = sum(hdata,3);
 hdata = sum(hdata,1);
 hdata = reshape(hdata,length(edges)-1,[]);
 hdata = sum(hdata,2)';
+
+writematrix(hdata,[tif_vol_file(1:end-4),'_histcounts.csv']);
 
 %%
 % fit phases as gaussians, modified from
