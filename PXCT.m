@@ -164,7 +164,7 @@ hist_fig.Position(3) = 400; % width
 hist_fig.Position(4) = 800; % height
 
 %% randomly sample densities and save
-tifdata = tiffreadVolume('S4_2_edensity.tif');
+tifdata = tiffreadVolume(tif_vol_file);
 tifdata = reshape(tifdata, [], 1);
 
 tifsample = datasample(tifdata, 1e6, 'Replace',false); % randomly subsample tif volume to fit in memory
@@ -208,7 +208,22 @@ figure;
     ylabel('probability (%)')
 
 %%
-voldisp = volshow(mbim);
+viewer = viewer3d();
+
+info = imfinfo(tif_vol_file);
+res = info.XResolution; % should be cm
+px = 1/(res(1)*1e6); % pixel to nm ratio
+T = [px 0 0 0;
+     0 px 0 0;
+     0 0 px 0;
+     0 0 0 1];
+
+voldisp = volshow(mbim, ...
+                  'Transformation', affinetform3d(T), ...
+                  parent=viewer);
+
+viewer.ScaleBar = 'on';
+viewer.ScaleBarUnits = 'nm';
 
 %%
 alpha = [0 0 .02 .8 1 .8 0.02 .005 .005];
