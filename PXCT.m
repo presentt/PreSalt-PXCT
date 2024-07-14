@@ -117,12 +117,12 @@ close(tiff_vol)
 clear tiff_vol;
 
 %%
-tif_vol_file = 'S4_1_edensity.tif';
+tif_vol_file = 'S4_2_edensity.tif';
 bim = blockedImage(tiffreadVolume(tif_vol_file), BlockSize=[100 100 100]);
 mbim = makeMultiLevel3D(bim);
 clear bim;
 
-%%
+%% compute histogram from full tif volume
 edges = 0:1e4;
 
 [hbim, ~] = apply(mbim, ...
@@ -163,19 +163,25 @@ hist_subplot(4).XAxis.Visible = true;
 hist_fig.Position(3) = 400; % width
 hist_fig.Position(4) = 800; % height
 
-%% fit distribution of densities (not binned density counts)
-tifdata = tiffreadVolume('S4_1_edensity.tif');
+%% randomly sample densities and save
+tifdata = tiffreadVolume('S4_2_edensity.tif');
 tifdata = reshape(tifdata, [], 1);
-%%
+
 tifsample = datasample(tifdata, 1e6, 'Replace',false); % randomly subsample tif volume to fit in memory
-tifsmpsngl = single(tifsample)./1e4;
-guess.mu = [0; .1; .4; .6; .75];
+tifsmpsngl = single(tifsample)./1e4; % convert to floating precision electron densities
+writematrix(tifsmpsngl,[tif_vol_file(1:end-4),'_sample.csv']);
+clear tifdata tifsample tifsmpsngl;
+
+%% fit sampled distribution of densities
+tifsmpsngl = readmatrix([tif_vol_file(1:end-4),'_sample.csv']);
+guess.mu = [0; .1; .4; .6; .75; 2.5];
 guess.Sigma(1,1,1) = .1;
 guess.Sigma(1,1,2) = .3;
 guess.Sigma(1,1,3) = .3;
 guess.Sigma(1,1,4) = .3;
 guess.Sigma(1,1,5) = .3;
-guess.ComponentProportion = [0.5 .1 0.1 0.1 0.2];
+guess.Sigma(1,1,6) = .3;
+guess.ComponentProportion = [0.4 .1 0.1 0.1 0.2 0.1];
 
 endmembers = length(guess.mu);
 fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-9);
@@ -201,41 +207,21 @@ figure;
     xlabel('electron density');
     ylabel('probability (%)')
 
-
-% Error using zeros
-% Requested 6018274080x5 (112.1GB) array exceeds maximum array size preference (27.7GB). This might cause MATLAB
-% to become unresponsive.
-% 
-% Error in wdensity (line 17)
-%     log_lh = zeros(n,k,'like',X);
-% 
-% Error in gmcluster>gmcluster_learn (line 271)
-%         log_lh=wdensity(X,S.mu, S.Sigma, S.PComponents, SharedCov, CovType);
-% 
-% Error in gmcluster (line 197)
-%         [S0,ll0,  optimInfo0] = gmcluster_learn...
-% 
-% Error in gmdistribution.fit (line 102)
-%         gmcluster(X,k,start,reps,CovType,SharedCov,RegV,options,probtol);
-% 
-% Error in fitgmdist (line 135)
-% gm = gmdistribution.fit(X,k,varargin{:});
 %%
 voldisp = volshow(mbim);
 
 %%
-GMModel = histGMModel;
 alpha = [0 0 .02 .8 1 .8 0.02 .005 .005];
 colors = [0 0 0;
           200 140 75;
           231 208 141;
           255 255 255;
           128 0 0] ./ 255;
-color = ones(9, 3);
+color = ones(length(alpha), 3);
 
-p = 2; % component to render
+p = 3; % component to render
 color(3:7, :) = repmat(colors(p, :), 5, 1);
-intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) 1e4];
+intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) max(tifsmpsngl)];
 queryPoints = linspace(min(intensity),max(intensity),256);
 alphamap = interp1(intensity,alpha,queryPoints)';
 colormap = interp1(intensity,color,queryPoints);
@@ -243,9 +229,9 @@ colormap = interp1(intensity,color,queryPoints);
 voldisp.Alphamap = alphamap;
 voldisp.Colormap = colormap;
 % 
-% p = 3; % component to render
+% p = 5; % component to render
 % color(3:7, :) = repmat(colors(p, :), 5, 1);
-% intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) 1e4];
+% intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) max(tifsmpsngl)];
 % queryPoints = linspace(min(intensity),max(intensity),256);
 % alphamap = interp1(intensity,alpha,queryPoints)';
 % colormap = interp1(intensity,color,queryPoints);
@@ -254,20 +240,25 @@ voldisp.Colormap = colormap;
 % voldisp.Colormap = (voldisp.Colormap + colormap) ./ 2;
 
 subplot(2,1,1)
-    h = histogram('BinEdges',edges,'BinCounts',hdata);
+    h = histogram(tifsmpsngl); %histogram('BinEdges',edges,'BinCounts',hdata);
     hold on;
     h.Normalization = "pdf";
     plot(h.BinEdges,gmPDF(h.BinEdges),'LineWidth',3);
+    for p = 1:endmembers
+        plot(h.BinEdges,...
+            normpdf(h.BinEdges,GMModel.mu(p),sqrt(GMModel.Sigma(:,:,p))).*GMModel.ComponentProportion(p),...
+            'LineWidth',1);
+    end
     hold off;
-    xlim([2 1e4])
-    ylim([0 max(gmPDF(h.BinEdges))])
+    xlim([.01 1])
+    ylim([0 10])
 subplot(2,1,2)
     plot(queryPoints,voldisp.Alphamap,'k-o'); hold on;
     h = plot(queryPoints,voldisp.Colormap,'-x'); hold off;
     h(1).Color = 'red'; h(2).Color = 'green'; h(3).Color = 'blue';
-    xlim([2 1e4])
+    xlim([0.01 1])
     legend('alpha','red','green','blue');
-    xlabel('e^- density x 10^4');
+    xlabel('e^- density');
 
 %voldisp.RenderingStyle ="GradientOpacity";
 
