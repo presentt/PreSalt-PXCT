@@ -117,7 +117,7 @@ close(tiff_vol)
 clear tiff_vol;
 
 %%
-tif_vol_file = 'S8_1_edensity.tif';
+tif_vol_file = 'S4_2_edensity.tif';
 bim = blockedImage(tiffreadVolume(tif_vol_file), BlockSize=[100 100 100]);
 mbim = makeMultiLevel3D(bim);
 clear bim;
@@ -204,28 +204,17 @@ tifsmpsngl = readmatrix([tif_vol_file(1:end-4),'_sample.csv']);
 
 tifsmpsngl = tifsmpsngl(tifsmpsngl>0.2); % don't fit pores
 
-clear guess gmPDF fitopts endmembers GMModel;
-% try fitting with a starting guess:
-% guess.mu = [.3; .4; .6; .75];%; 2.5];
-% guess.Sigma(1,1,1) = .1;
-% guess.Sigma(1,1,2) = .1;
-% guess.Sigma(1,1,3) = .1;
-% guess.Sigma(1,1,4) = .1;
-% guess.ComponentProportion = [.4 .1 .1 .4];
-% endmembers = length(guess.mu);
-% fitopts = statset('Display','final','MaxIter',500,'TolFun',.001);
-% GMModel = fitgmdist(tifsmpsngl,...
-%     endmembers, ...
-%     'Start',guess, 'Options',fitopts);
+clear gmPDF fitopts endmembers GMModel;
 
 % try fitting without a starting guess
-endmembers = 3;
+% might have to run a few times to get endmembers correctly
+endmembers = 5;
 fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-6);
 GMModel = fitgmdist(tifsmpsngl,...
     endmembers, ...
     'Options',fitopts, 'SharedCovariance', false, 'CovarianceType','diagonal');
 
-save([tif_vol_file(1:end-4),'_GMModel.mat'],"GMModel");
+% save([tif_vol_file(1:end-4),'_GMModel.mat'],"GMModel");
 disp(GMModel.mu);
 gmPDF = @(x) arrayfun(@(x0) pdf(GMModel,x0),x);
 
@@ -276,7 +265,7 @@ colors = [200 140 75;
           128 64 0;] ./ 255;
 color = ones(length(alpha), 3);
 
-p = 1; % component to render
+p = 4; % component to render
 color(3:7, :) = repmat(colors(p, :), 5, 1);
 intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) max(tifsmpsngl)];
 queryPoints = linspace(min(intensity),max(intensity),256);
@@ -320,61 +309,3 @@ subplot(2,1,2)
 
 %%
 % use DataReadFinished event to record a video...
-
-%% functions
-
-function metadataStruct = readMetadata(filename)
-    opts = delimitedTextImportOptions("NumVariables", 3);
-    opts.DataLines = [1, 5];
-    opts.Delimiter = ["#", "="];
-    opts.VariableNames = ["Var1", "name", "value"];
-    opts.SelectedVariableNames = ["name", "value"];
-    opts.VariableTypes = ["string", "string", "double"];
-    opts.ExtraColumnsRule = "ignore";
-    opts.EmptyLineRule = "read";
-    opts = setvaropts(opts, ["Var1", "name"], "WhitespaceRule", "preserve");
-    opts = setvaropts(opts, ["Var1", "name"], "EmptyFieldRule", "auto");
-    raw_metadata = readtable(filename, opts);
-    
-    raw_metadata.Properties.RowNames = raw_metadata.name;
-
-    metadataStruct.low_cutoff = raw_metadata.value("low_cutoff");
-    metadataStruct.high_cutoff = raw_metadata.value("high_cutoff");
-    metadataStruct.factor = raw_metadata.value("factor");
-    metadataStruct.pixel_size = raw_metadata.value("pixel size");
-    metadataStruct.factor_edensity = raw_metadata.value("factor_edensity");
-end
-
-function Nr = edensity(int16data, varargin)
-    % calculate electron density (electrons/cubic angstrom) 
-    % from integer data and metadata structure or scaling factors
-
-    floatingdata = single(int16data);
-
-    switch length(varargin)
-        case 3
-            high_cutoff = varargin{1};
-            low_cutoff = varargin{2};
-            factor_edensity = varargin{3};
-        case 1
-            metadataStruct = varargin{1};
-            high_cutoff = metadataStruct.high_cutoff;
-            low_cutoff = metadataStruct.low_cutoff;
-            factor_edensity = metadataStruct.factor_edensity;
-    end
-
-    Nr = (floatingdata.*(high_cutoff - low_cutoff)/(2^16-1) + low_cutoff).*factor_edensity;
-
-    Nr = uint16(round(Nr.*1e4)); % to make integers meaningful?
-    % WARNING: cannot handle electron densities higher than 6.5535
-    % electrons/cubic angstrom (typically nonphysical)
-end
-
-function rho = density(n_e, A, Z)
-    % calculates mass density from electron density (e- per Angstrom^3),
-    % molar mass (g/mol), and electrons per mole
-
-    N_A = 6.0221367e23; % mol^-1, Avogadro constant
-
-    rho = (n_e .* A) ./ (N_A .* Z) .* 1e24; % g/cm^3
-end
