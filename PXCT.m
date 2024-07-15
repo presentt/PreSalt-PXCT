@@ -117,7 +117,7 @@ close(tiff_vol)
 clear tiff_vol;
 
 %%
-tif_vol_file = 'S4_2_edensity.tif';
+tif_vol_file = 'S8_1_edensity.tif';
 bim = blockedImage(tiffreadVolume(tif_vol_file), BlockSize=[100 100 100]);
 mbim = makeMultiLevel3D(bim);
 clear bim;
@@ -172,25 +172,63 @@ tifsmpsngl = single(tifsample)./1e4; % convert to floating precision electron de
 writematrix(tifsmpsngl,[tif_vol_file(1:end-4),'_sample.csv']);
 clear tifdata tifsample tifsmpsngl;
 
+%%
+figure;
+    hS41 = histogram(readmatrix('S4_1_edensity_sample.csv'), 'DisplayName', 'S4-1');
+    hS41.Normalization = 'pdf';
+    hS41.DisplayStyle = 'stairs';
+    hS41.morebins;
+    hold on;
+    hS42 = histogram(readmatrix('S4_2_edensity_sample.csv'), 'DisplayName', 'S4-2');
+    hS42.Normalization = 'pdf';
+    hS42.DisplayStyle = 'stairs';
+    hS42.morebins;
+    hS81 = histogram(readmatrix('S8_1_edensity_sample.csv'), 'DisplayName', 'S8-1');
+    hS81.Normalization = 'pdf';
+    hS81.DisplayStyle = 'stairs';
+    hS81.morebins;
+    hS82 = histogram(readmatrix('S8_2_edensity_sample.csv'), 'DisplayName', 'S8-2');
+    hS82.Normalization = 'pdf';
+    hS82.DisplayStyle = 'stairs';
+    hS81.morebins;
+    hold off;
+    legend();
+    xlim([0.01 3]);
+    %ylim([0 6]);
+    set(gca,'YScale','log');
+    xlabel('electron density');
+    ylabel('probability (%)');
+
 %% fit sampled distribution of densities
 tifsmpsngl = readmatrix([tif_vol_file(1:end-4),'_sample.csv']);
-guess.mu = [0; .1; .4; .6; .75; 2.5];
-guess.Sigma(1,1,1) = .1;
-guess.Sigma(1,1,2) = .3;
-guess.Sigma(1,1,3) = .3;
-guess.Sigma(1,1,4) = .3;
-guess.Sigma(1,1,5) = .3;
-guess.Sigma(1,1,6) = .3;
-guess.ComponentProportion = [0.4 .1 0.1 0.1 0.2 0.1];
 
-endmembers = length(guess.mu);
-fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-9);
+tifsmpsngl = tifsmpsngl(tifsmpsngl>0.2); % don't fit pores
+
+clear guess gmPDF fitopts endmembers GMModel;
+% try fitting with a starting guess:
+% guess.mu = [.3; .4; .6; .75];%; 2.5];
+% guess.Sigma(1,1,1) = .1;
+% guess.Sigma(1,1,2) = .1;
+% guess.Sigma(1,1,3) = .1;
+% guess.Sigma(1,1,4) = .1;
+% guess.ComponentProportion = [.4 .1 .1 .4];
+% endmembers = length(guess.mu);
+% fitopts = statset('Display','final','MaxIter',500,'TolFun',.001);
+% GMModel = fitgmdist(tifsmpsngl,...
+%     endmembers, ...
+%     'Start',guess, 'Options',fitopts);
+
+% try fitting without a starting guess
+endmembers = 3;
+fitopts = statset('Display','final','MaxIter',500,'TolFun',1e-6);
 GMModel = fitgmdist(tifsmpsngl,...
-    endmembers,'RegularizationValue',1e-9, ...
-    'Start',guess, 'Options',fitopts);
+    endmembers, ...
+    'Options',fitopts, 'SharedCovariance', false, 'CovarianceType','diagonal');
+
+save([tif_vol_file(1:end-4),'_GMModel.mat'],"GMModel");
 disp(GMModel.mu);
 gmPDF = @(x) arrayfun(@(x0) pdf(GMModel,x0),x);
-    
+
 figure;
     h = histogram(tifsmpsngl);
     h.Normalization = "pdf";
@@ -201,7 +239,7 @@ figure;
             normpdf(h.BinEdges,GMModel.mu(p),sqrt(GMModel.Sigma(:,:,p))).*GMModel.ComponentProportion(p),...
             'LineWidth',1);
     end
-    xlim([.01 1])
+    %xlim([.01 6.55])
     ylim([0 10])
     hold off;
     xlabel('electron density');
@@ -226,15 +264,19 @@ viewer.ScaleBar = 'on';
 viewer.ScaleBarUnits = 'nm';
 
 %%
+GMModel = load([tif_vol_file(1:end-4),'_GMModel.mat'], "GMModel");
+GMModel = GMModel.GMModel;
+
 alpha = [0 0 .02 .8 1 .8 0.02 .005 .005];
-colors = [0 0 0;
+colors = [200 140 75;
           200 140 75;
           231 208 141;
           255 255 255;
-          128 0 0] ./ 255;
+          0   128 0;
+          128 64 0;] ./ 255;
 color = ones(length(alpha), 3);
 
-p = 3; % component to render
+p = 1; % component to render
 color(3:7, :) = repmat(colors(p, :), 5, 1);
 intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) max(tifsmpsngl)];
 queryPoints = linspace(min(intensity),max(intensity),256);
@@ -244,10 +286,9 @@ colormap = interp1(intensity,color,queryPoints);
 voldisp.Alphamap = alphamap;
 voldisp.Colormap = colormap;
 % 
-% p = 5; % component to render
+% p = 6; % component to render
 % color(3:7, :) = repmat(colors(p, :), 5, 1);
-% intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) max(tifsmpsngl)];
-% queryPoints = linspace(min(intensity),max(intensity),256);
+% intensity = [0 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) 6.55];
 % alphamap = interp1(intensity,alpha,queryPoints)';
 % colormap = interp1(intensity,color,queryPoints);
 % 
@@ -265,13 +306,13 @@ subplot(2,1,1)
             'LineWidth',1);
     end
     hold off;
-    xlim([.01 1])
+    xlim([0 max(tifsmpsngl)])
     ylim([0 10])
 subplot(2,1,2)
     plot(queryPoints,voldisp.Alphamap,'k-o'); hold on;
     h = plot(queryPoints,voldisp.Colormap,'-x'); hold off;
     h(1).Color = 'red'; h(2).Color = 'green'; h(3).Color = 'blue';
-    xlim([0.01 1])
+    xlim([0 max(tifsmpsngl)])
     legend('alpha','red','green','blue');
     xlabel('e^- density');
 
