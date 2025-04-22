@@ -2,4 +2,4 @@ Code for "Cretaceous Chert‐Hosted Microfossils Visualized With Synchrotron Pty
 
 Scripts written in Matlab 2024b, and require Optimization Toolbox, Image Processing Toolbox, and Statistics and Machine Learning Toolbox.
 
-Requisite data files archived at doi: [10.22002/zfzsv-05f14](https://doi.org/10.22002/zfzsv-05f14)
+Requisite data files archived at doi: [10.22002/zakt1-a5j05](https://doi.org/10.22002/zakt1-a5j05)
