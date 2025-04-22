@@ -172,33 +172,6 @@ tifsmpsngl = single(tifsample)./1e4; % convert to floating precision electron de
 writematrix(tifsmpsngl,[tif_vol_file(1:end-4),'_sample.csv']);
 clear tifdata tifsample tifsmpsngl;
 
-%%
-figure;
-    hS41 = histogram(readmatrix('S4_1_edensity_sample.csv'), 'DisplayName', 'S4-1');
-    hS41.Normalization = 'pdf';
-    hS41.DisplayStyle = 'stairs';
-    hS41.morebins;
-    hold on;
-    hS42 = histogram(readmatrix('S4_2_edensity_sample.csv'), 'DisplayName', 'S4-2');
-    hS42.Normalization = 'pdf';
-    hS42.DisplayStyle = 'stairs';
-    hS42.morebins;
-    hS81 = histogram(readmatrix('S8_1_edensity_sample.csv'), 'DisplayName', 'S8-1');
-    hS81.Normalization = 'pdf';
-    hS81.DisplayStyle = 'stairs';
-    hS81.morebins;
-    hS82 = histogram(readmatrix('S8_2_edensity_sample.csv'), 'DisplayName', 'S8-2');
-    hS82.Normalization = 'pdf';
-    hS82.DisplayStyle = 'stairs';
-    hS81.morebins;
-    hold off;
-    legend();
-    xlim([0.01 3]);
-    %ylim([0 6]);
-    set(gca,'YScale','log');
-    xlabel('electron density');
-    ylabel('probability (%)');
-
 %% fit sampled distribution of densities
 tifsmpsngl = readmatrix([tif_vol_file(1:end-4),'_sample.csv']);
 
@@ -234,3 +207,29 @@ figure;
     xlabel('electron density');
     ylabel('probability (%)')
 
+%%
+figure;
+    hS41 = histogram(readmatrix('S4_1_edensity_sample.csv'), 'DisplayName', 'S4-1');
+    hS41.Normalization = 'pdf';
+    hS41.DisplayStyle = 'stairs';
+    hS41.morebins;
+    hold on;
+    hS42 = histogram(readmatrix('S4_2_edensity_sample.csv'), 'DisplayName', 'S4-2');
+    hS42.Normalization = 'pdf';
+    hS42.DisplayStyle = 'stairs';
+    hS42.morebins;
+    hS81 = histogram(readmatrix('S8_1_edensity_sample.csv'), 'DisplayName', 'S8-1');
+    hS81.Normalization = 'pdf';
+    hS81.DisplayStyle = 'stairs';
+    hS81.morebins;
+    hS82 = histogram(readmatrix('S8_2_edensity_sample.csv'), 'DisplayName', 'S8-2');
+    hS82.Normalization = 'pdf';
+    hS82.DisplayStyle = 'stairs';
+    hS81.morebins;
+    hold off;
+    legend();
+    xlim([0.01 3]);
+    %ylim([0 6]);
+    %set(gca,'YScale','log');
+    xlabel('electron density');
+    ylabel('probability (%)');

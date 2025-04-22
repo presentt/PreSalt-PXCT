@@ -1,5 +1,5 @@
 %%
-tif_vol_file = 'S8_1_edensity.tif';
+tif_vol_file = 'S4_2_edensity.tif';
 bim = blockedImage(tiffreadVolume(tif_vol_file), BlockSize=[100 100 100]);
 mbim = makeMultiLevel3D(bim);
 clear bim;
@@ -33,24 +33,24 @@ voldisp = volshow(mbim, ...
                   'Transformation', affinetform3d(T), ...
                   parent=viewer);
 
-voldisp.RenderingStyle = "SlicePlanes";
-
 viewer.ScaleBar = 'on';
 viewer.ScaleBarUnits = 'nm';
 
+voldisp.RenderingStyle = "SlicePlanes";
+
 %%
-alpha = [0 0 0.005 1 1 1 1 1 .005 .005];
-color = ones(length(alpha), 3);
+alpha = [0 0 0.005 1 1 1 1 1 .005 .005 0];
+color = repmat(linspace(0, 1, length(alpha))',1,3);
 
 colors = [231 208 141;
-          150 100 50; % kerogen
+              150 100 50;
           231 208 141;
           255 0 0;
           255 255 255;] ./ 255;
 
-p = 1; % component to render
+p = 2; % component to render
 color(4:8, :) = repmat(colors(p, :), 5, 1);
-intensity = [0 min(tifsmpsngl)+.001 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) max(tifsmpsngl)];
+intensity = [0 min(tifsmpsngl)+.001 GMModel.mu(p)-3.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)-sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p) GMModel.mu(p)+sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+2.*sqrt(GMModel.Sigma(:,:,p)) GMModel.mu(p)+3.*sqrt(GMModel.Sigma(:,:,p)) max(tifsmpsngl) max(tifsmpsngl)+0.001];
 queryPoints = linspace(min(intensity), max(intensity), 256);
 alphamap = interp1(intensity,alpha,queryPoints)';
 colormap = interp1(intensity,color,queryPoints);
@@ -68,7 +68,7 @@ subplot(2,1,1)
             scale.*normpdf(h.BinEdges,GMModel.mu(p),sqrt(GMModel.Sigma(:,:,p))).*GMModel.ComponentProportion(p),...
             'LineWidth',1);
     end
-        plot(queryPoints,voldisp.Alphamap+1,'k-o');
+    % plot(queryPoints,voldisp.Alphamap+1,'k-o');
     hold off;
     xlim([0 max(tifsmpsngl)])
     ylim([0 10])
